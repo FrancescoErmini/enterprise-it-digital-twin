@@ -1,0 +1,49 @@
+id: D
+title: Excessively permissive network configuration
+detector: permissive_network_sensitive_service
+classification: potential_exposure
+synthetic: true
+primary_resource:
+  label: GCPFirewall
+  id: projects/alt-prod-payments/global/firewalls/prod-payments-allow-postgres-partner-temp
+evidence:
+  - label: GCPFirewall
+    id: projects/alt-prod-payments/global/firewalls/prod-payments-allow-postgres-partner-temp
+    why: Enabled INGRESS rule on prod-payments-vpc.
+  - label: GCPIpRule
+    id: projects/alt-prod-payments/global/firewalls/prod-payments-allow-postgres-partner-temp/allow/5432tcp
+    why: Allows tcp/5432 (PostgreSQL).
+  - label: GCPIpRange
+    id: 0.0.0.0/0
+    why: Source range is the whole internet.
+  - label: GCPInstance
+    id: projects/alt-prod-payments/zones/europe-west1-c/instances/payments-db-proxy-01
+    why: Production instance labelled data-classification=restricted with a public IP on the same VPC.
+concern: >
+  A firewall rule meant for a temporary partner integration exposes the PostgreSQL port of the production
+  payments network to the internet; an internet-facing database proxy sits on that network.
+missing_evidence:
+  - Whether anything listens on tcp/5432 on payments-db-proxy-01 (runtime state).
+  - Whether the rule's target tag db-proxy is the only scope (upstream rules evaluate the whole VPC).
+  - Database authentication strength and TLS settings on the proxy.
+expected_agent_behaviour: >
+  Report the rule, the port, the 0.0.0.0/0 source and the reachable public instance; contrast it with the
+  internal-only postgres rule; classify potential_exposure.
+remediation_options:
+  - id: D1
+    title: Restrict the source range to the partner's published egress CIDRs
+    description: Replace 0.0.0.0/0 with the partner ranges and add an expiry review.
+    operational_consequences: None for the partner if the ranges are correct; others lose access, which is the intent.
+    disruption: low
+  - id: D2
+    title: Remove the rule and use Private Service Connect / VPN for the partner
+    description: Delete prod-payments-allow-postgres-partner-temp and provide a private connectivity path.
+    operational_consequences: Partner integration stops until the private path is ready.
+    disruption: high
+controls:
+  - label: GCPFirewall
+    id: projects/alt-prod-payments/global/firewalls/prod-payments-allow-postgres-internal
+    why_not_flagged: Same port, but source range 10.20.0.0/16 (internal only).
+  - label: GCPFirewall
+    id: projects/alt-test-qa/global/firewalls/test-qa-allow-rdp-office
+    why_not_flagged: Management port, but restricted to the office range 198.51.100.0/24.

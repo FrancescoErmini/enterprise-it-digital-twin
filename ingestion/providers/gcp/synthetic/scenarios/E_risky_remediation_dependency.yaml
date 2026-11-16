@@ -1,0 +1,51 @@
+id: E
+title: Risky remediation dependency on a shared privileged identity
+detector: shared_privileged_identity
+classification: verified_fact
+synthetic: true
+primary_resource:
+  label: GCPServiceAccount
+  id: "131000000000200"
+evidence:
+  - label: GCPServiceAccount
+    id: "131000000000200"
+    why: platform-automation-sa, holder of roles/owner on alt-prod-payments and roles/editor on alt-prod-web and alt-prod-data.
+  - label: GCPInstance
+    id: projects/alt-prod-payments/zones/europe-west1-c/instances/payments-api-01
+    why: One of six production workloads that RUNS_AS this identity.
+  - label: GCPInstance
+    id: projects/alt-prod-data/zones/us-central1-a/instances/warehouse-loader-01
+    why: Workload in a different production project that also RUNS_AS this identity.
+  - label: GCPPolicyBinding
+    id: //cloudresourcemanager.googleapis.com/projects/alt-prod-payments_roles/owner
+    why: Owner on the production payments project.
+concern: >
+  Six production workloads across two projects share one highly privileged identity. The privilege is a
+  verified fact from the graph; any one compromised workload yields owner on payments. Removing the grants
+  naively would break every workload at once.
+missing_evidence:
+  - Which permissions each workload actually uses (IAM Recommender / audit-log usage data is not in the graph).
+  - Deployment dependencies between the workloads.
+expected_agent_behaviour: >
+  Quantify the shared usage (workload count, projects), compare remediation options by operational impact,
+  and recommend a staged split rather than immediate revocation.
+remediation_options:
+  - id: E1
+    title: Revoke owner/editor from platform-automation-sa immediately
+    description: Remove the three broad bindings in one change.
+    operational_consequences: All six workloads lose permissions simultaneously; high chance of a production outage.
+    disruption: high
+  - id: E2
+    title: Split into per-workload identities, then revoke
+    description: Create one SA per workload group with least-privilege roles, migrate workloads one at a time, then remove the broad grants.
+    operational_consequences: Each migration needs a VM restart in a maintenance window; outage risk is contained to one workload at a time.
+    disruption: low
+  - id: E3
+    title: Constrain with IAM deny policy on the most dangerous permissions first
+    description: Deny resourcemanager.projects.setIamPolicy and iam.serviceAccountKeys.create for the SA while E2 progresses.
+    operational_consequences: Low impact if workloads never change IAM; must be validated against automation that does.
+    disruption: low
+controls:
+  - label: GCPServiceAccount
+    id: "131000000000101"
+    why_not_flagged: web-frontend-min-sa is shared by four workloads but holds only logging/monitoring writer roles.

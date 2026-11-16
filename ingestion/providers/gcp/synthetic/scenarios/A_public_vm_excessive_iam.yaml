@@ -1,0 +1,63 @@
+id: A
+title: Public VM with excessive IAM privileges
+detector: public_workload_privileged_identity
+classification: potential_exposure
+synthetic: true
+primary_resource:
+  label: GCPInstance
+  id: projects/alt-prod-web/zones/europe-west1-b/instances/web-frontend-01
+evidence:
+  - label: GCPInstance
+    id: projects/alt-prod-web/zones/europe-west1-b/instances/web-frontend-01
+    why: Production instance (folder "Production") with an external ONE_TO_ONE_NAT access config.
+  - label: GCPNicAccessConfig
+    id: projects/alt-prod-web/zones/europe-west1-b/instances/web-frontend-01/networkinterfaces/nic0/accessconfigs/ONE_TO_ONE_NAT
+    why: Carries the public IP.
+  - label: GCPFirewall
+    id: projects/alt-prod-web/global/firewalls/prod-web-allow-ssh-legacy
+    why: INGRESS rule allowing tcp/22 from 0.0.0.0/0 on the instance's VPC.
+  - label: GCPServiceAccount
+    id: "131000000000100"
+    why: web-frontend-sa, the identity the instance RUNS_AS.
+  - label: GCPPolicyBinding
+    id: //cloudresourcemanager.googleapis.com/projects/alt-prod-web_roles/editor
+    why: Grants roles/editor on alt-prod-web to the service account.
+  - label: GCPPolicyBinding
+    id: //cloudresourcemanager.googleapis.com/projects/alt-prod-web_roles/iam.serviceAccountTokenCreator
+    why: Lets the service account mint tokens for other service accounts in the project (CAN_IMPERSONATE).
+  - label: GCPPolicyBinding
+    id: //cloudresourcemanager.googleapis.com/projects/alt-prod-data_roles/storage.admin
+    why: Grants storage.admin on the production data project (CAN_READ/CAN_WRITE/CAN_DELETE on its buckets).
+concern: >
+  An internet-reachable production VM runs as a service account that can administer storage in two
+  production projects and impersonate other service accounts. Anyone who obtains code execution on the
+  VM would inherit those permissions through the instance metadata server.
+missing_evidence:
+  - Whether sshd actually listens on tcp/22 and which authentication it accepts (runtime state is not in the graph).
+  - Whether OS Login / IAP or a host firewall restricts SSH further than the VPC firewall rule.
+  - Any known vulnerability in the software running on the VM.
+  - Firewall target tags are modelled, but the upstream exposure rule evaluates the whole VPC, so tag scoping is not proven either way.
+expected_agent_behaviour: >
+  Report the exposure path instance -> firewall -> service account -> bindings -> reachable buckets and
+  impersonable identities, classify it potential_exposure (not a proven attack), and list the missing
+  runtime evidence explicitly.
+remediation_options:
+  - id: A1
+    title: Remove the legacy SSH rule and use IAP TCP forwarding
+    description: Delete prod-web-allow-ssh-legacy; allow tcp/22 only from 35.235.240.0/20 (IAP).
+    operational_consequences: Operators must use IAP for SSH. No application traffic impact (HTTPS stays on 443).
+    disruption: low
+  - id: A2
+    title: Replace web-frontend-sa with a least-privilege identity
+    description: Run the instance as a dedicated SA holding only logging/monitoring writer, and move storage access to the specific bucket the app needs.
+    operational_consequences: Requires a VM stop/start to change the service account and an application test of every storage call.
+    disruption: medium
+  - id: A3
+    title: Drop the cross-project storage.admin and the token-creator grants
+    description: Remove roles/storage.admin on alt-prod-data and roles/iam.serviceAccountTokenCreator on alt-prod-web from web-frontend-sa.
+    operational_consequences: Any job relying on those grants fails until re-granted narrowly; needs an access-log review first.
+    disruption: medium
+controls:
+  - label: GCPInstance
+    id: projects/alt-prod-web/zones/europe-west1-b/instances/web-frontend-02
+    why_not_flagged: Also public, but runs as web-frontend-min-sa which only holds logging/monitoring writer roles.
