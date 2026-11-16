@@ -1,0 +1,46 @@
+id: C
+title: Publicly accessible sensitive storage
+detector: public_sensitive_storage
+classification: potential_exposure
+synthetic: true
+primary_resource:
+  label: GCPBucket
+  id: alt-prod-customer-exports
+evidence:
+  - label: GCPBucket
+    id: alt-prod-customer-exports
+    why: Production bucket labelled data-classification=confidential with public access prevention "inherited".
+  - label: GCPPolicyBinding
+    id: //storage.googleapis.com/buckets/alt-prod-customer-exports_roles/storage.objectViewer
+    why: Bucket-level binding of roles/storage.objectViewer to allUsers (is_public=true, no condition).
+  - label: GCPLabel
+    id: alt-prod-customer-exports:data-classification:confidential
+    why: Sensitivity label on the bucket.
+concern: >
+  Object read access is granted to allUsers on a bucket labelled confidential, and public access prevention
+  is not enforced, so the policy configuration could allow unauthenticated reads of customer exports.
+missing_evidence:
+  - The objects actually stored in the bucket and whether they contain customer data (object inventory is not collected).
+  - An organisation policy enforcing public access prevention above the project (org policies are not in the graph).
+  - Access logs showing whether anonymous reads ever happened.
+expected_agent_behaviour: >
+  Cite the upstream object_storage_public finding, add the sensitivity label as context, classify the result
+  potential_exposure, and avoid claiming data was exfiltrated.
+remediation_options:
+  - id: C1
+    title: Remove the allUsers binding and enforce public access prevention
+    description: Delete the allUsers objectViewer binding and set publicAccessPrevention=enforced.
+    operational_consequences: Any consumer relying on anonymous links breaks; requires signed URLs for legitimate external sharing.
+    disruption: medium
+  - id: C2
+    title: Serve exports through signed URLs with short expiry
+    description: Keep the bucket private and issue V4 signed URLs from the export service.
+    operational_consequences: Application change in the export service; no change for internal readers.
+    disruption: medium
+controls:
+  - label: GCPBucket
+    id: alt-prod-static-assets
+    why_not_flagged: Public by design and labelled data-classification=public (still reported by the upstream rule, but not a sensitive-storage scenario).
+  - label: GCPBucket
+    id: alt-dev-scratch
+    why_not_flagged: Has an allAuthenticatedUsers binding but public access prevention is enforced.

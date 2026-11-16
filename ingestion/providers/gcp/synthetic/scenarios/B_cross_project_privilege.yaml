@@ -1,0 +1,61 @@
+id: B
+title: Cross-project privilege exposure
+detector: cross_environment_privilege
+classification: potential_exposure
+synthetic: true
+primary_resource:
+  label: GCPServiceAccount
+  id: "133000000000100"
+evidence:
+  - label: GCPServiceAccount
+    id: "133000000000100"
+    why: ci-runner-sa, owned by alt-dev-sandbox (folder "Development").
+  - label: GCPInstance
+    id: projects/alt-dev-sandbox/zones/us-east1-b/instances/ci-runner-01
+    why: Development CI runner with a public IP that runs as ci-runner-sa.
+  - label: GCPPolicyBinding
+    id: //cloudresourcemanager.googleapis.com/projects/alt-prod-payments_roles/storage.objectAdmin
+    why: Grants object admin on every bucket in the production payments project.
+  - label: GCPPolicyBinding
+    id: //cloudresourcemanager.googleapis.com/projects/alt-prod-payments_roles/cloudsql.client
+    why: Grants connect on the production payments Cloud SQL instance.
+  - label: GCPPolicyBinding
+    id: //cloudresourcemanager.googleapis.com/projects/alt-prod-payments_roles/iam.serviceAccountUser
+    why: Grants actAs on production service accounts, including platform-automation-sa (owner of alt-prod-payments).
+  - label: GCPBucket
+    id: alt-prod-payments-ledger
+    why: Restricted production bucket the development identity can read, write and delete.
+concern: >
+  A service account from a less-trusted development project holds write access to restricted production
+  data and can act as production service accounts, one of which owns the production payments project.
+missing_evidence:
+  - Whether ci-runner-sa keys exist outside Google Cloud (service account keys are not part of this seed).
+  - Who can trigger CI jobs on ci-runner-01 (CI system configuration is not in the graph).
+  - IAM conditions or VPC Service Controls perimeters that might block the access at request time.
+expected_agent_behaviour: >
+  Identify the development identity, enumerate production resources it can reach (CAN_READ/CAN_WRITE/
+  CAN_DELETE/CAN_IMPERSONATE edges and the bindings behind them), state that the escalation via actAs is a
+  potential path, and say what evidence would confirm exploitability.
+remediation_options:
+  - id: B1
+    title: Move production deploy rights to a production-owned identity
+    description: Create a deployer SA inside alt-prod-payments, grant it the needed roles, and let CI impersonate it only through a gated workflow.
+    operational_consequences: CI pipelines need a new authentication step; production deploys pause until it is wired.
+    disruption: medium
+  - id: B2
+    title: Revoke the three production grants from ci-runner-sa
+    description: Remove storage.objectAdmin, cloudsql.client and iam.serviceAccountUser on alt-prod-payments.
+    operational_consequences: Immediate break of any CI job that touches production payments; safest from a security standpoint.
+    disruption: high
+  - id: B3
+    title: Narrow the grants with IAM conditions while migrating
+    description: Restrict the bindings to specific buckets and add a time-bound condition until B1 lands.
+    operational_consequences: Low immediate impact; leaves residual risk during the migration window.
+    disruption: low
+controls:
+  - label: GCPServiceAccount
+    id: "133000000000201"
+    why_not_flagged: analytics-dev-sa (development) holds roles/viewer on a Testing project, not Production.
+  - label: GCPServiceAccount
+    id: "131000000000301"
+    why_not_flagged: bi-reader-sa is a production identity with viewer on another production project (same trust level).
