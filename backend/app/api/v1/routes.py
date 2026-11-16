@@ -166,9 +166,7 @@ def datasources(request: Request) -> dict[str, Any]:
     totals = platform.client.read("MATCH (n) RETURN count(n) AS nodes", max_rows=1).rows[0]
     return {"sources": sources, "graph": {"nodes": totals["nodes"], "labels": len(schema.labels),
                                           "relationship_types": len(schema.relationship_types)},
-            "manifest_updated_at": manifest.get("updated_at"),
-            "future_modes": [{"provider_id": "gcp", "ingestion_mode": "cartography", "status": "documented, not implemented",
-                              "doc": "docs/architecture.md#future-live-ingestion"}]}
+            "manifest_updated_at": manifest.get("updated_at")}
 
 
 @router.get("/audit/recent")

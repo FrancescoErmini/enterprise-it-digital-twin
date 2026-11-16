@@ -41,7 +41,9 @@ class PlatformServices:
 
     # -- lifecycle -----------------------------------------------------------------------
     def install_usecases(self) -> None:
-        for factory in load_installed(self.settings.installed_usecases):
+        from app.usecases.installed import INSTALLED_USECASES
+
+        for factory in load_installed(self.settings.installed_usecases or INSTALLED_USECASES):
             usecase = factory()
             self.usecases.register(usecase.id, usecase)
             for tool in usecase.tools:

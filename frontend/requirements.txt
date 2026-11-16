@@ -1,0 +1,4 @@
+# digital-twin-ui (versions pinned and justified in docs/decisions.md)
+streamlit==1.67.0
+requests==2.34.2
+pandas==3.1.1

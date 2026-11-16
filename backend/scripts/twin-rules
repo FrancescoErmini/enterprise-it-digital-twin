@@ -1,0 +1,13 @@
+#!/bin/sh
+# Run Cartography's official rules CLI against the running technology graph as the read-only agent user.
+#   docker compose exec digital-twin-api twin-rules list
+#   docker compose exec digital-twin-api twin-rules run compute_instance_exposed --output json
+set -e
+NEO4J_PASSWORD="$(cat "${NEO4J_READER_PASSWORD_FILE:-/secrets/neo4j_reader_password}")"
+export NEO4J_PASSWORD
+cmd="$1"; shift || true
+case "$cmd" in
+  run) exec cartography-rules run "$@" --uri "${NEO4J_URI:-bolt://neo4j:7687}" --user "${NEO4J_READER_USER:-twin_reader}" \
+         --database "${NEO4J_DATABASE:-neo4j}" --neo4j-password-env-var NEO4J_PASSWORD ;;
+  *) exec cartography-rules "$cmd" "$@" ;;
+esac

@@ -14,12 +14,21 @@ def _float(name: str, default: float) -> float:
     return float(os.environ.get(name, default))
 
 
+def _secret(name: str) -> str:
+    """Read NAME, or the file named by NAME_FILE (credentials generated locally at first start)."""
+    path = os.environ.get(f"{name}_FILE")
+    if path and os.path.exists(path):
+        with open(path, encoding="utf-8") as fh:
+            return fh.read().strip()
+    return os.environ.get(name, "")
+
+
 @dataclass(frozen=True)
 class Settings:
     neo4j_uri: str = field(default_factory=lambda: os.environ.get("NEO4J_URI", "bolt://localhost:7687"))
     neo4j_database: str = field(default_factory=lambda: os.environ.get("NEO4J_DATABASE", "neo4j"))
     neo4j_reader_user: str = field(default_factory=lambda: os.environ.get("NEO4J_READER_USER", "twin_reader"))
-    neo4j_reader_password: str = field(default_factory=lambda: os.environ.get("NEO4J_READER_PASSWORD", ""))
+    neo4j_reader_password: str = field(default_factory=lambda: _secret("NEO4J_READER_PASSWORD"))
 
     # Query execution limits
     query_timeout_s: float = field(default_factory=lambda: _float("QUERY_TIMEOUT_SECONDS", 10.0))
@@ -47,8 +56,10 @@ class Settings:
         default_factory=lambda: os.environ.get("INGESTION_MANIFEST_PATH", "/data/manifest/ingestion.json"))
     audit_log_path: str = field(default_factory=lambda: os.environ.get("AUDIT_LOG_PATH", "/data/audit/queries.jsonl"))
 
+    # Optional override of the installed use-case packages (comma-separated module paths).
+    # Empty means: the list in app/usecases/installed.py.
     installed_usecases: tuple[str, ...] = field(default_factory=lambda: tuple(
-        u.strip() for u in os.environ.get("INSTALLED_USECASES", "app.usecases.security.gcp").split(",") if u.strip()))
+        u.strip() for u in os.environ.get("INSTALLED_USECASES", "").split(",") if u.strip()))
 
 
 def get_settings() -> Settings:

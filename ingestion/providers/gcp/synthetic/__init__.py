@@ -9,4 +9,6 @@ register(DataSource(
                  "GCP transform/load functions. Not a real Cartography ingestion run."),
     root_label="GCPOrganization",
     loader=load_synthetic_gcp,
+    documented_modes=({"ingestion_mode": "cartography", "status": "documented, not implemented",
+                       "doc": "docs/architecture.md#future-live-ingestion-data_sourcegcp"},),
 ))

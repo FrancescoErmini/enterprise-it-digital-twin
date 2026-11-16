@@ -18,6 +18,8 @@ class DataSource:
     description: str
     root_label: str  # label whose nodes carry the provider's freshness (lastupdated)
     loader: LoaderFn
+    # Other ingestion modes for this provider that are documented but not implemented.
+    documented_modes: tuple[dict[str, str], ...] = ()
 
 
 _REGISTRY: dict[tuple[str, str], DataSource] = {}

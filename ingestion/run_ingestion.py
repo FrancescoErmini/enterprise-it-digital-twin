@@ -30,6 +30,14 @@ def _env(name: str, default: str | None = None) -> str:
     return value
 
 
+def _secret(name: str) -> str:
+    path = os.environ.get(f"{name}_FILE")
+    if path and os.path.exists(path):
+        with open(path, encoding="utf-8") as fh:
+            return fh.read().strip()
+    return _env(name)
+
+
 def seed_once(driver, source, database: str) -> dict:
     update_tag = int(time.time())
     with driver.session(database=database) as session:
@@ -54,8 +62,8 @@ def main() -> int:
 
     uri = _env("NEO4J_URI", "bolt://localhost:7687")
     database = _env("NEO4J_DATABASE", "neo4j")
-    driver = wait_for_neo4j(uri, (_env("NEO4J_USER", "neo4j"), _env("NEO4J_PASSWORD")))
-    ensure_reader_user(driver, _env("NEO4J_READER_USER"), _env("NEO4J_READER_PASSWORD"))
+    driver = wait_for_neo4j(uri, (_env("NEO4J_USER", "neo4j"), _secret("NEO4J_PASSWORD")))
+    ensure_reader_user(driver, _env("NEO4J_READER_USER", "twin_reader"), _secret("NEO4J_READER_PASSWORD"))
 
     source = registry.get(args.provider, args.mode)
     if args.reset:
@@ -87,6 +95,7 @@ def main() -> int:
         "ingestion_mode": source.ingestion_mode,
         "description": source.description,
         "root_label": source.root_label,
+        "documented_modes": list(source.documented_modes),
         "completed_at": datetime.now(timezone.utc).isoformat(),
         "update_tag": first["update_tag"],
         "counts": first["counts"],

@@ -5,3 +5,5 @@ __pycache__/
 .venv/
 *.egg-info/
 data/
+docker-compose.override.yml
+.local/
